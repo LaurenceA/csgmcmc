@@ -1,4 +1,4 @@
-bp_gpu = lsub -g 1 -m 48 --autoname --cmd
+bp_gpu = lsub -g 1 -m 22 --autoname --cmd
 
 #General functions
 a1 = $(word 1,$(subst _, , $(1)))
@@ -15,12 +15,11 @@ results/cifar10h_%: main.py
 results/train_%: main.py
 	$(bp_gpu) python $< $@ --trainset train --S $*
 
-trainset_list = test_ cifar10h_
-S_list = 10 3 1
+trainset_list = cifar10h_ test_ 
+S_list = 1000 300 100 30 10 3 1
 
 path_trainset = $(addprefix results/,$(trainset_list))
 path_trainset_S = $(foreach pre,$(path_trainset),$(addprefix $(pre),$(S_list))) 
 cifar10_test: $(path_trainset_S)
 
 cifar10_train: $(addprefix results/train_,$(S_list))
-

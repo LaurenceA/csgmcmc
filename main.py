@@ -61,9 +61,15 @@ transform_test = transforms.Compose([
 ])
 
 trainset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset=="train"), download=True, transform=transform_train)
+lr_factor = 1.
 if args.trainset=="cifar10h":
     cifar10h = np.load("cifar10h.npy").astype(np.float)
     trainset.targets = cifar10h
+    lr_factor = 50.
+    #one_hot = np.zeros((10000, 10))
+    #one_hot[range(10000), trainset.targets] = lr_factor
+    #trainset.targets = one_hot
+
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
 
 testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
@@ -84,7 +90,7 @@ def update_params(lr,epoch):
         if not hasattr(p,'buf'):
             p.buf = torch.zeros(p.size()).cuda()
         d_p = p.grad.data
-        d_p.add_(p.data, alpha=weight_decay)
+        d_p.add_(p.data, alpha=weight_decay*lr_factor) #temp*100/datasize)
         buf_new = (1-args.alpha)*p.buf - lr*d_p
         if (epoch%args.cycle)+1>args.noise_epochs:
             eps = torch.randn(p.size()).cuda()
@@ -98,8 +104,7 @@ def adjust_learning_rate(epoch, batch_idx):
     cos_inner /= T // args.M
     cos_out = np.cos(cos_inner) + 1
     lr = 0.5*cos_out*lr_0
-    if args.trainset == "cifar10h":
-        lr = lr / 50.
+    lr = lr / lr_factor
     return lr
 
 def train(epoch):
