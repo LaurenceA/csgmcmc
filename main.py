@@ -9,10 +9,13 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.distributions as td
 
+from gz1.gz1 import GZ1
+
 from torch.distributions import Categorical
 
 import torchvision
 import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 
 import os
 import argparse
@@ -35,7 +38,7 @@ parser.add_argument('--cycle', type=int, default=50,  help='cycle length')
 parser.add_argument('--M', type=int, default=4,  help='number of cycles')
 parser.add_argument('--noise_epochs', type=int, default=45,  help='epoch in cycle after which we add noise')
 parser.add_argument('--sample_epochs', type=int, default=47, help='epoch in cycle after which we save samples')
-parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h"])
+parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h", "gz1"])
 
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available()
@@ -60,26 +63,50 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-trainset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset=="train"), download=True, transform=transform_train)
-lr_factor = 1.
-if args.trainset=="cifar10h":
-    cifar10h = np.load("cifar10h.npy").astype(np.float)
-    trainset.targets = cifar10h
+if args.trainset in ['cifar10h', 'test', 'train']:
+    num_classes = 10
+
+    trainset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset=="train"), download=True, transform=transform_train)
+    lr_factor = 1.
+    if args.trainset=="cifar10h":
+        cifar10h = np.load("cifar10h.npy").astype(np.float)
+        trainset.targets = cifar10h
+        lr_factor = 50.
+        #one_hot = np.zeros((10000, 10))
+        #one_hot[range(10000), trainset.targets] = lr_factor
+        #trainset.targets = one_hot
+
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+
+    testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=0)
+elif args.trainset == 'gz1':
+    #class RandomRotate:
+    #    def __call__(self, x):
+    #        angle = random.choice([0, 90, -90, 180])
+    #        return TF.rotate(x, angle)
+    trans = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        #RandomRotate(),
+        transforms.RandomRotation(180),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor()
+    ])
+
+    num_classes = 6
     lr_factor = 50.
-    #one_hot = np.zeros((10000, 10))
-    #one_hot[range(10000), trainset.targets] = lr_factor
-    #trainset.targets = one_hot
+    trainset = GZ1(True, transform=trans)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
-
-testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=0)
+    testset = GZ1(False, transform=transforms.Compose([transforms.CenterCrop(50), transforms.ToTensor()]))
+    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+    
 
 
 
 # Model
 print('==> Building model..')
-net = ResNet18()
+net = ResNet18(num_classes=num_classes)
 if use_cuda:
     net.cuda()
     cudnn.benchmark = True
@@ -100,6 +127,7 @@ def update_params(lr,epoch):
 
 def adjust_learning_rate(epoch, batch_idx):
     rcounter = epoch*num_batch+batch_idx
+    assert isinstance(rcounter, int)
     cos_inner = np.pi * (rcounter % (T // args.M))
     cos_inner /= T // args.M
     cos_out = np.cos(cos_inner) + 1
@@ -113,7 +141,7 @@ def train(epoch):
     train_loss = 0
     correct = 0
     total = 0
-    train_likelihood = td.Multinomial if args.trainset=="cifar10h" else td.Categorical
+    train_likelihood = td.Multinomial if args.trainset in ["cifar10h","gz1"] else td.Categorical
 
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         if use_cuda:
@@ -128,11 +156,12 @@ def train(epoch):
 
         train_loss += loss.data.item()
         predicted = torch.argmax(outputs, -1)
-        if args.trainset == "cifar10h":
+        if args.trainset in ["cifar10h", "gz1"]:
             targets = torch.argmax(targets, -1)
         total += targets.size(0)
         correct += predicted.eq(targets).cpu().sum()
         if batch_idx%100==0:
+            #os.system('nvidia-smi')
             print('Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
@@ -148,7 +177,11 @@ def test(epoch):
             inputs, targets = inputs.cuda(), targets.cuda()
             output = net(inputs)
             #loss = F.cross_entropy(output, targets)
-            loss = -td.Categorical(logits=output).log_prob(targets).mean()
+            if args.trainset == "gz1":
+                loss = -td.Multinomial(logits=output).log_prob(targets).mean()
+                targets = torch.argmax(targets, -1)
+            else:
+                loss = -td.Categorical(logits=output).log_prob(targets).mean()
 
             test_loss += loss.data.item()
             predicted = torch.argmax(output.data, -1)
@@ -168,7 +201,7 @@ def test(epoch):
 
 weight_decay = 5e-4
 datasize = len(trainset)
-num_batch = datasize/args.batch_size+1
+num_batch = datasize//args.batch_size+1
 lr_0 = 0.5 # initial lr
 T = args.M*args.cycle*num_batch # total number of iterations
 criterion = nn.CrossEntropyLoss()
@@ -178,6 +211,7 @@ mt = 0
 outputs = []
 for epoch in range(args.M*args.cycle):
     train(epoch)
+    test(epoch)
     if (epoch%args.cycle)+1>args.sample_epochs: # save 3 models per cycle
         output = test(epoch)
         outputs.append(output)
@@ -188,6 +222,8 @@ targetss = []
 for _, targets in testloader:
     targetss.append(targets)
 targets = torch.cat(targetss, 0)
+if args.trainset == "gz1":
+    targets = torch.argmax(targets, -1)
 
 #[Samples, 10000, 10]
 outputs = torch.stack(outputs, 0)

@@ -90,14 +90,14 @@ class PreActResNet(nn.Module):
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
 
 
-def PreActResNet18():
-    return PreActResNet(PreActBlock, [2,2,2,2])
+def PreActResNet18(num_classes=10):
+    return PreActResNet(PreActBlock, [2,2,2,2], num_classes=num_classes)
 
 def PreActResNet34():
     return PreActResNet(PreActBlock, [3,4,6,3])
