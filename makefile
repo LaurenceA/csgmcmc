@@ -31,3 +31,9 @@ c100_list = 0.0_ 0.05_ 0.1_ 0.2_ 0.5_ 0.8_
 path_c100 = $(addprefix results/cifar100_,$(c100_list))
 path_c100_S = $(foreach pre,$(path_c100),$(addprefix $(pre),$(S_list))) 
 cifar100: $(path_c100_S)
+
+results/noise_%: main.py
+	$(bp_gpu) python $< $@ --trainset train --Pnoise $(call a1,$*) --S $(call a2,$*)
+npath_c100 = $(addprefix results/noise_,$(c100_list))
+npath_c100_S = $(foreach pre,$(npath_c100),$(addprefix $(pre),$(S_list))) 
+noise: $(npath_c100_S)

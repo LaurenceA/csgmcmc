@@ -41,6 +41,7 @@ parser.add_argument('--noise_epochs', type=int, default=45,  help='epoch in cycl
 parser.add_argument('--sample_epochs', type=int, default=47, help='epoch in cycle after which we save samples')
 parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h"]) #, "gz1"])
 parser.add_argument('--PCIFAR100', type=float, nargs='?')
+parser.add_argument('--Pnoise', type=float, nargs='?')
 
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available()
@@ -76,6 +77,16 @@ if args.trainset=="cifar10h":
     lr_factor = 50.
 
 testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
+
+if args.Pnoise is not None:
+    assert args.trainset == "train"
+
+    train_noise = int(50000*args.Pnoise)
+    test_noise  = int(10000*args.Pnoise)
+
+    trainset.targets[:train_noise] = list(np.random.randint(10, size=train_noise))
+    testset.targets[:test_noise]   = list(np.random.randint(10, size=test_noise))
+    
 
 if args.PCIFAR100 is not None:
     assert args.trainset == "train"
