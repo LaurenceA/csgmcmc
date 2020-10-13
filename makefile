@@ -15,6 +15,7 @@ results/cifar10h_%: main.py
 results/train_%: main.py
 	$(bp_gpu) python $< $@ --trainset train --S $*
 
+
 trainset_list = cifar10h_ test_ 
 S_list = 1000 300 100 30 10 3 1
 
@@ -23,3 +24,10 @@ path_trainset_S = $(foreach pre,$(path_trainset),$(addprefix $(pre),$(S_list)))
 cifar10_test: $(path_trainset_S)
 
 cifar10_train: $(addprefix results/train_,$(S_list))
+
+results/cifar100_%: main.py
+	$(bp_gpu) python $< $@ --trainset train --PCIFAR100 $(call a1,$*) --S $(call a2,$*)
+c100_list = 0.0_ 0.05_ 0.1_ 0.2_ 0.5_ 0.8_
+path_c100 = $(addprefix results/cifar100_,$(c100_list))
+path_c100_S = $(foreach pre,$(path_c100),$(addprefix $(pre),$(S_list))) 
+cifar100: $(path_c100_S)

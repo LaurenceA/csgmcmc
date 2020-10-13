@@ -8,6 +8,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.distributions as td
+import torch.utils.data as tud
 
 from gz1.gz1 import GZ1
 
@@ -38,7 +39,8 @@ parser.add_argument('--cycle', type=int, default=50,  help='cycle length')
 parser.add_argument('--M', type=int, default=4,  help='number of cycles')
 parser.add_argument('--noise_epochs', type=int, default=45,  help='epoch in cycle after which we add noise')
 parser.add_argument('--sample_epochs', type=int, default=47, help='epoch in cycle after which we save samples')
-parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h", "gz1"])
+parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h"]) #, "gz1"])
+parser.add_argument('--PCIFAR100', type=float, nargs='?')
 
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available()
@@ -63,43 +65,76 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-if args.trainset in ['cifar10h', 'test', 'train']:
-    num_classes = 10
+num_classes = 10
 
-    trainset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset=="train"), download=True, transform=transform_train)
-    lr_factor = 1.
-    if args.trainset=="cifar10h":
-        cifar10h = np.load("cifar10h.npy").astype(np.float)
-        trainset.targets = cifar10h
-        lr_factor = 50.
-        #one_hot = np.zeros((10000, 10))
-        #one_hot[range(10000), trainset.targets] = lr_factor
-        #trainset.targets = one_hot
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
-
-    testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=0)
-elif args.trainset == 'gz1':
-    #class RandomRotate:
-    #    def __call__(self, x):
-    #        angle = random.choice([0, 90, -90, 180])
-    #        return TF.rotate(x, angle)
-    trans = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        #RandomRotate(),
-        transforms.RandomRotation(180),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor()
-    ])
-
-    num_classes = 6
+trainset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset=="train"), download=True, transform=transform_train)
+lr_factor = 1.
+if args.trainset=="cifar10h":
+    cifar10h = np.load("cifar10h.npy").astype(np.float)
+    trainset.targets = cifar10h
     lr_factor = 50.
-    trainset = GZ1(True, transform=trans)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-    testset = GZ1(False, transform=transforms.Compose([transforms.CenterCrop(50), transforms.ToTensor()]))
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
+
+if args.PCIFAR100 is not None:
+    assert args.trainset == "train"
+    
+    cifar100_trainset = torchvision.datasets.CIFAR100(root='data', train=True, download=True, transform=transform_train)
+    cifar100_testset = torchvision.datasets.CIFAR100(root='data', train=False,transform=transform_test)
+
+    #Assign random labels
+    cifar100_trainset.targets = list(np.random.randint(10, size=len(cifar100_trainset.targets)))
+    cifar100_testset.targets = list(np.random.randint(10, size=len(cifar100_testset.targets)))
+
+    Ncifar100_train = int(50000*args.PCIFAR100)
+    Ncifar100_test  = int(10000*args.PCIFAR100)
+
+    Ncifar10_train = 50000 - Ncifar100_train
+    Ncifar10_test  = 10000 - Ncifar100_test
+
+    print(f"CIFAR100 train :{Ncifar100_train}")
+    print(f"CIFAR10  train :{Ncifar10_train}")
+    print(f"CIFAR100 test  :{Ncifar100_test}")
+    print(f"CIFAR10  test  :{Ncifar10_test}")
+
+    assert 50000 == Ncifar100_train + Ncifar10_train
+    assert 10000 == Ncifar100_test  + Ncifar10_test
+
+    #Subsets
+    cifar100_trainset = tud.Subset(cifar100_trainset, range(Ncifar100_train))
+    cifar100_testset  = tud.Subset(cifar100_testset,  range(Ncifar100_test))
+
+    cifar10_trainset = tud.Subset(trainset, range(Ncifar10_train))
+    cifar10_testset  = tud.Subset(testset,  range(Ncifar10_test))
+
+    #Combined
+    trainset = tud.ConcatDataset([cifar100_trainset, cifar10_trainset])
+    testset  = tud.ConcatDataset([cifar100_testset,  cifar10_testset])
+
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2, pin_memory=True)
+testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2, pin_memory=True)
+
+#elif args.trainset == 'gz1':
+#    #class RandomRotate:
+#    #    def __call__(self, x):
+#    #        angle = random.choice([0, 90, -90, 180])
+#    #        return TF.rotate(x, angle)
+#    trans = transforms.Compose([
+#        transforms.RandomCrop(32, padding=4),
+#        #RandomRotate(),
+#        transforms.RandomRotation(180),
+#        transforms.RandomHorizontalFlip(),
+#        transforms.ToTensor()
+#    ])
+#
+#    num_classes = 6
+#    lr_factor = 50.
+#    trainset = GZ1(True, transform=trans)
+#    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+#
+#    testset = GZ1(False, transform=transforms.Compose([transforms.CenterCrop(50), transforms.ToTensor()]))
+#    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
     
 
 
