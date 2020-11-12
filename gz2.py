@@ -26,7 +26,7 @@ class GZ2():
         return img, target
 
 
-def load_consensus_data(dir_path, consensus_quantile, sample_size, train_transform=None, test_transform=None):
+def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, train_transform=None, test_transform=None):
     with open(f"{dir_path}/imgs", 'rb') as f:
         data = pickle.load(f)
     with open(f"{dir_path}/targets", 'rb') as f:
@@ -57,8 +57,11 @@ def load_consensus_data(dir_path, consensus_quantile, sample_size, train_transfo
     data = data[perm]
     targets = targets[perm]
 
-    data_train, data_test = np.split(data, 2)
-    targets_train, targets_test = np.split(targets, 2)
+    num_train = round(prop_train * sample_size)
+    data_train = data[:num_train]
+    data_test = data[num_train:]
+    targets_train = targets[:num_train]
+    targets_test = targets[num_train:]
 
     return targets.shape[1], \
            GZ2(data_train, targets_train, transform=train_transform), \

@@ -138,14 +138,19 @@ def test(args, use_cuda, net, testloader, epoch):
 
 
 def prepare_data(args, transform_train, transform_test):
+    # sample_size = 20000
+    # train_prop = 0.5
+    sample_size = 15000
+    train_prop = 1.0 / 3.0
     if args.curated:
-        # this consensus threshold filters the data down to 20014 data points, closest possible to 20000
-        # we then simply sample 20000, this should keep the class distributions as close as possible
-        # between the curated and uncurated versions
-        consensus_quantile = 0.918
+        # corresponds to the top 20014 data points in terms of consensus
+        # consensus_quantile = 0.918
+        # corresponds to the top 15002 data points in terms of consensus
+        consensus_quantile = 0.9384
     else:
         consensus_quantile = 0.0
-    return gz2.load_consensus_data(args.data_dir, consensus_quantile, 20000,
+
+    return gz2.load_consensus_data(args.data_dir, consensus_quantile, sample_size, train_prop,
                                    train_transform=transform_train, test_transform=transform_test)
 
 
