@@ -140,13 +140,17 @@ def test(args, use_cuda, net, testloader, epoch):
 def prepare_data(args, transform_train, transform_test):
     # sample_size = 20000
     # train_prop = 0.5
-    sample_size = 15000
-    train_prop = 1.0 / 3.0
+    # sample_size = 15000
+    # train_prop = 1.0 / 3.0
+    sample_size = 12500
+    train_prop = 1.0 / 5.0
     if args.curated:
         # corresponds to the top 20014 data points in terms of consensus
         # consensus_quantile = 0.918
         # corresponds to the top 15002 data points in terms of consensus
-        consensus_quantile = 0.9384
+        # consensus_quantile = 0.9384
+        # corresponds to the top 12574 data points in terms of consensus
+        consensus_quantile = 0.949153
     else:
         consensus_quantile = 0.0
 
