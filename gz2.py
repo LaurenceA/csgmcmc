@@ -26,6 +26,30 @@ class GZ2():
         return img, target
 
 
+def threshold_search(dir_path, target):
+    with open(f"{dir_path}/targets", 'rb') as f:
+        targets = pickle.load(f)
+
+    df = pd.DataFrame(targets)
+    df['consensus_coefficient'] = (df.max(axis=1) + 1) / (df.sum(axis=1) + 2)
+    df['class'] = df.idxmax(axis=1)
+
+    min_val = 0
+    max_val = 1.0
+    while True:
+        consensus_quantile = (min_val + max_val) / 2
+        red = df[df['consensus_coefficient'] >=
+                df.groupby('class')['consensus_coefficient'].transform('quantile', consensus_quantile)]
+        num = red.shape[0]
+        print(f"{num}: {consensus_quantile}")
+        if num < target:
+            max_val = consensus_quantile
+        else:
+            if round(max_val - min_val, 10) == 0:
+                return consensus_quantile
+            min_val = consensus_quantile
+
+
 def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, train_transform=None, test_transform=None):
     with open(f"{dir_path}/imgs", 'rb') as f:
         data = pickle.load(f)
