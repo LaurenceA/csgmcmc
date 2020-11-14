@@ -42,6 +42,7 @@ parser.add_argument('--sample_epochs', type=int, default=47, help='epoch in cycl
 parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h"]) #, "gz1"])
 parser.add_argument('--PCIFAR100', type=float, nargs='?')
 parser.add_argument('--Pnoise', type=float, nargs='?')
+parser.add_argument('--net', type=str, default="resnet", choices=["resnet", "alexnet"])
 
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available()
@@ -152,7 +153,11 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False,
 
 # Model
 print('==> Building model..')
-net = ResNet18(num_classes=num_classes)
+Net = {
+    'resnet' : ResNet18,
+    'alexnet' : AlexNet,
+}[args.net]
+net = Net(num_classes=num_classes)
 if use_cuda:
     net.cuda()
     cudnn.benchmark = True
