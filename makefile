@@ -1,4 +1,4 @@
-bp_gpu = lsub -g 1 -m 22 --autoname --cmd
+bp_gpu = lsub -g 1 -m 22 -t 12 --autoname --cmd
 
 #General functions
 a1 = $(word 1,$(subst _, , $(1)))
@@ -13,8 +13,7 @@ results/test_%: main.py
 results/cifar10h_%: main.py
 	$(bp_gpu) python $< $@ --trainset cifar10h --S $* --cycle 150 --noise_epochs 120 --sample_epochs 130 --M 8
 results/train_%: main.py
-	$(bp_gpu) python $< $@ --trainset train --S $*
-
+	python $< $@ --trainset train --S $* --net alexnet
 
 trainset_list = cifar10h_ test_ 
 S_list = 1000 300 100 30 10 3 1
@@ -37,3 +36,19 @@ results/noise_%: main.py
 npath_c100 = $(addprefix results/noise_,$(c100_list))
 npath_c100_S = $(foreach pre,$(npath_c100),$(addprefix $(pre),$(S_list))) 
 noise: $(npath_c100_S)
+
+
+results/map_%: main.py
+	$(bp_gpu) python $< $@ --trainset train --S $* --net alexnet --type map
+path_map_S = $(addprefix results/map_,$(S_list))
+map: $(path_map_S)
+
+results/sgd_res_%: sgd.py
+	$(bp_gpu) python $< $@ --S $*
+path_sgd_S = $(addprefix results/sgd_res_,$(S_list))
+sgd: $(path_sgd_S)
+
+#results/train10000_%: sgd.py
+#	$(bp_gpu) python $< $@ --S $* 
+#path_sgd_S = $(addprefix results/sgd_res_,$(S_list))
+#sgd: $(path_sgd_S)

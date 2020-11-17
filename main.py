@@ -40,9 +40,9 @@ parser.add_argument('--M', type=int, default=4,  help='number of cycles')
 parser.add_argument('--noise_epochs', type=int, default=45,  help='epoch in cycle after which we add noise')
 parser.add_argument('--sample_epochs', type=int, default=47, help='epoch in cycle after which we save samples')
 parser.add_argument('--trainset', default='train', nargs='?', choices=["train", "test", "cifar10h"]) #, "gz1"])
+parser.add_argument('--subset', type=int, nargs='?')
 parser.add_argument('--PCIFAR100', type=float, nargs='?')
 parser.add_argument('--Pnoise', type=float, nargs='?')
-parser.add_argument('--net', type=str, default="resnet", choices=["resnet", "alexnet"])
 
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available()
@@ -78,6 +78,9 @@ if args.trainset=="cifar10h":
     lr_factor = 50.
 
 testset = torchvision.datasets.CIFAR10(root='data', train=(args.trainset!="train"), download=True, transform=transform_test)
+
+if args.subset is not None:
+    trainset = t.utils.data.Subset(trainset, range(args.subset))
 
 if args.Pnoise is not None:
     assert args.trainset == "train"
@@ -153,11 +156,7 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False,
 
 # Model
 print('==> Building model..')
-Net = {
-    'resnet' : ResNet18,
-    'alexnet' : AlexNet,
-}[args.net]
-net = Net(num_classes=num_classes)
+net = ResNet18(num_classes=num_classes)
 if use_cuda:
     net.cuda()
     cudnn.benchmark = True
@@ -202,6 +201,7 @@ def train(epoch):
         outputs = net(inputs)
         #loss = criterion(outputs, targets)
         loss = -train_likelihood(logits=outputs).log_prob(targets).mean()
+        loss = loss #- temp*logPw(net)
         loss.backward()
         update_params(lr,epoch)
 
