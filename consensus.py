@@ -39,13 +39,16 @@ def log_prob_noconsensus(lp, S):
 
     returns log-probability of noconsensus for each datapoint
     """
-    # 1-p_y = \sum_{y'\neq y} p_y'
-    # compute using logsumexp for better numerical stability
-    #[N, K, K-1]
-    lpnoty = lp[..., arange_without_all_i(lp.shape[-1])].logsumexp(-1)
-    #[N, K, S-1]
-    result = t.stack([lpnoty + lp*i for i in range(1, S)], -1)
-    return result.view(*result.shape[:-2], -1).logsumexp(-1)
+    if S==1:
+        return -1E10*t.ones(lp.shape[:-1], device=lp.device)
+    else:
+        # 1-p_y = \sum_{y'\neq y} p_y'
+        # compute using logsumexp for better numerical stability
+        #[N, K, K-1]
+        lpnoty = lp[..., arange_without_all_i(lp.shape[-1])].logsumexp(-1)
+        #[N, K, S-1]
+        result = t.stack([lpnoty + lp*i for i in range(1, S)], -1)
+        return result.view(*result.shape[:-2], -1).logsumexp(-1)
 
 class AbstractConsensusDist():
     def __init__(self, logits, S):
