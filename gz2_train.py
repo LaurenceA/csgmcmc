@@ -22,6 +22,8 @@ def parse_args():
                         help='input batch size for training (default: 64)')
     parser.add_argument('--alpha', type=float, default=0.9,
                         help='1: SGLD; <1: SGHMC')
+    parser.add_argument('--lr-factor', type=float, default=50.,
+                        help='LR Factor')
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed')
     parser.add_argument('--S', type=int, default=1, help='inverse temperature')
@@ -50,12 +52,12 @@ def randn(size, use_cuda):
     return x
 
 
-def update_params(args, use_cuda, net, epoch, lr, weight_decay, lr_factor, temp, data_size):
+def update_params(args, use_cuda, net, epoch, lr, weight_decay, temp, data_size):
     for p in net.parameters():
         if not hasattr(p, 'buf'):
             p.buf = zeros(p.size(), use_cuda)
         d_p = p.grad.data
-        d_p.add_(p.data, alpha=weight_decay * lr_factor)  # temp*100/datasize)
+        d_p.add_(p.data, alpha=weight_decay * args.lr_factor)  # temp*100/datasize)
         buf_new = (1 - args.alpha) * p.buf - lr * d_p
         if (epoch % args.cycle) + 1 > args.noise_epochs:
             eps = randn(p.size(), use_cuda)
@@ -64,18 +66,18 @@ def update_params(args, use_cuda, net, epoch, lr, weight_decay, lr_factor, temp,
         p.buf = buf_new
 
 
-def adjust_learning_rate(args, epoch, T, lr_0, lr_factor, batch_idx, num_batch):
+def adjust_learning_rate(args, epoch, T, lr_0, batch_idx, num_batch):
     rcounter = epoch * num_batch + batch_idx
     assert isinstance(rcounter, int)
     cos_inner = np.pi * (rcounter % (T // args.M))
     cos_inner /= T // args.M
     cos_out = np.cos(cos_inner) + 1
     lr = 0.5 * cos_out * lr_0
-    lr = lr / lr_factor
+    lr = lr / args.lr_factor
     return lr
 
 
-def train(args, use_cuda, net, trainloader, epoch, num_batch, T, lr_0, lr_factor, weight_decay, temp, data_size,
+def train(args, use_cuda, net, trainloader, epoch, num_batch, T, lr_0, weight_decay, temp, data_size,
           train_likelihood=td.Multinomial):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -87,12 +89,12 @@ def train(args, use_cuda, net, trainloader, epoch, num_batch, T, lr_0, lr_factor
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
         net.zero_grad()
-        lr = adjust_learning_rate(args, epoch, T, lr_0, lr_factor, batch_idx, num_batch)
+        lr = adjust_learning_rate(args, epoch, T, lr_0, batch_idx, num_batch)
         outputs = net(inputs)
         # loss = criterion(outputs, targets)
         loss = -train_likelihood(logits=outputs).log_prob(targets).mean()
         loss.backward()
-        update_params(args, use_cuda, net, epoch, lr, weight_decay, lr_factor, temp, data_size)
+        update_params(args, use_cuda, net, epoch, lr, weight_decay, temp, data_size)
 
         train_loss += loss.data.item()
         predicted = torch.argmax(outputs, -1)
@@ -142,17 +144,19 @@ def prepare_data(args, transform_train, transform_test):
     # train_prop = 0.5
     # sample_size = 15000
     # train_prop = 1.0 / 3.0
-    sample_size = 11250
-    train_prop = 1.0 / 9.0
+    sample_size = 12500
+    train_prop = 1.0 / 5.0
+    # sample_size = 11250
+    # train_prop = 1.0 / 9.0
     if args.curated:
         # corresponds to the top 20014 data points in terms of consensus
         # consensus_quantile = 0.918
         # corresponds to the top 15002 data points in terms of consensus
         # consensus_quantile = 0.9384
         # corresponds to the top 12574 data points in terms of consensus
-        # consensus_quantile = 0.949153
+        consensus_quantile = 0.949153
         # corresponds to the top 11420 data points in terms of consensus
-        consensus_quantile = 0.95348
+        # consensus_quantile = 0.95348
     else:
         consensus_quantile = 0.0
 
@@ -203,7 +207,7 @@ def main():
     data_size = len(trainset)
     num_batch = data_size // args.batch_size + 1
     lr_0 = 0.5  # initial lr
-    lr_factor = 50.
+    # lr_factor = 50.
     T = args.M * args.cycle * num_batch  # total number of iterations
     criterion = nn.CrossEntropyLoss()
     mt = 0
@@ -211,7 +215,7 @@ def main():
     #### Save 10000 x 10 output matrix for all sampled networks
     outputs = []
     for epoch in range(args.M * args.cycle):
-        train(args, use_cuda, net, trainloader, epoch, num_batch, T, lr_0, lr_factor, weight_decay, temp, data_size)
+        train(args, use_cuda, net, trainloader, epoch, num_batch, T, lr_0, weight_decay, temp, data_size)
         test(args, use_cuda, net, testloader, epoch)
         if (epoch % args.cycle) + 1 > args.sample_epochs:  # save 3 models per cycle
             output = test(args, use_cuda, net, testloader, epoch)
