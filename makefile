@@ -52,3 +52,10 @@ sgd: $(path_sgd_S)
 #	$(bp_gpu) python $< $@ --S $* 
 #path_sgd_S = $(addprefix results/sgd_res_,$(S_list))
 #sgd: $(path_sgd_S)
+
+
+S_gen_list = 1 2 3 4 5 6 7
+results/toy_%: toy.py
+	$(bp_gpu) python $< $@ --S $* 
+path_toy_S = $(addprefix results/toy_,$(S_gen_list))
+toy: $(path_toy_S)

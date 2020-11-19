@@ -30,9 +30,9 @@ parser = argparse.ArgumentParser(description='cSG-MCMC CIFAR10 Training')
 parser.add_argument('output_filename', type=str, nargs='?', default='test')
 parser.add_argument('--alpha', type=float, default=0.9,
                     help='1: SGLD; <1: SGHMC')
-parser.add_argument('--seed', type=int, default=1,
+parser.add_argument('--seed', type=int, default=0,
                     help='random seed')
-parser.add_argument('--periods', type=int, default=100,  help='cycle length')
+parser.add_argument('--periods', type=int, default=50,  help='cycle length')
 parser.add_argument('--S', type=int, default=1, nargs='?')
 parser.add_argument('--train_obj', default='raw', nargs='?', type=str, choices=['true', 'raw'])
 parser.add_argument('--lr', default=0.01, type=float, nargs='?')
@@ -51,13 +51,13 @@ def logPw(net):
             total += -(temp*mod.weight**2).sum((-1, -2)) * mod.in_features / 4
     return total
 
-inv_temps = torch.tensor([1E6, 1E5, 1E4, 1E3, 128, 64, 32, 16, 8, 6, 5, 4, 3, 2, 1, 1/2, 1/4, 1/8, 1/16])[:, None, None, None]
+inv_temps = torch.tensor([128, 64, 32, 16, 8, 7, 6, 5, 4, 3, 2, 1, 1/2, 1/4, 1/8, 1/16])[:, None, None, None]
 #inv_temps = torch.tensor([1.])[:, None, None, None]
 temp = (1/inv_temps).cuda()
 num_temps = len(temp)
 
-num_nets = 40
-num_train = 100
+num_nets = 500
+num_train = 100 #100  #num_nets=40, num_train=25
 num_test = 1000
 num_data = num_train + num_test
 in_features = 5
@@ -69,7 +69,7 @@ X_test  = X[..., num_train:, :]
 
 class Scale(nn.Module):
     def forward(self, x):
-        return 5*x
+        return x
 
 class Linear(nn.Module):
     def __init__(self, in_features, out_features, shape):
@@ -140,7 +140,7 @@ def raw_obj(output, Y, avg=True):
     return lp
 
 def train():
-    for _ in range(100):
+    for _ in range(400):
         net.zero_grad()
         output = net(X_train)
         #temp applied in logPw
@@ -176,5 +176,11 @@ lp = lp.logsumexp(0) - math.log(lp.shape[0])
 
 result = raw_obj(lp, Y_test.cpu())
 
+temps = 1/inv_temps[:, 0, 0, 0]
+result = result.mean(-1)
+print(torch.stack([inv_temps[:, 0, 0, 0], result], 1))
 
-print(torch.stack([inv_temps[:, 0, 0, 0], result.mean(-1)], 1))
+pd.DataFrame({
+    'lambda' : temps,
+    'test_ll' : result
+}).to_csv(args.output_filename)
