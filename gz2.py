@@ -50,7 +50,8 @@ def threshold_search(dir_path, target):
             min_val = consensus_quantile
 
 
-def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, train_transform=None, test_transform=None):
+def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train,
+                        train_transform=None, test_transform=None, one_hot=True):
     with open(f"{dir_path}/imgs", 'rb') as f:
         data = pickle.load(f)
     with open(f"{dir_path}/targets", 'rb') as f:
@@ -62,6 +63,7 @@ def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, t
     targets = targets[perm]
 
     df = pd.DataFrame(targets)
+    num_classes = len(df.columns)
 
     # determine majority class and corrected consensus coefficient of majority class
     df['consensus_coefficient'] = (df.max(axis=1) + 1) / (df.sum(axis=1) + 2)
@@ -74,7 +76,11 @@ def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, t
     df = df.sample(sample_size)
 
     data = data[df.index]
-    targets = df.iloc[:, :-2].to_numpy()
+    if one_hot:
+        targets = np.zeros((len(df.index), num_classes))
+        targets[np.arange(len(df.index)), df['class']] = 1
+    else:
+        targets = df.iloc[:, :num_classes].to_numpy()
 
     # permute again to avoid any bugs related to the consensus filtering
     perm = np.random.permutation(targets.shape[0])
@@ -87,6 +93,6 @@ def load_consensus_data(dir_path, consensus_quantile, sample_size, prop_train, t
     targets_train = targets[:num_train]
     targets_test = targets[num_train:]
 
-    return targets.shape[1], \
+    return num_classes, \
            GZ2(data_train, targets_train, transform=train_transform), \
            GZ2(data_test, targets_test, transform=test_transform)
