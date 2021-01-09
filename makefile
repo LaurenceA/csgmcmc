@@ -59,3 +59,10 @@ results/toy_%: toy.py
 	$(bp_gpu) python $< $@ --S $* 
 path_toy_S = $(addprefix results/toy_,$(S_gen_list))
 toy: $(path_toy_S)
+	
+
+results/toy_ssl/%: toy_ssl.py
+	$(bp_gpu) python $< $@ --S 1
+path_toy_ssl_S = $(addprefix results/toy_ssl/,$(S_gen_list))
+toy_ssl: $(path_toy_ssl_S)
+	

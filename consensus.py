@@ -88,7 +88,7 @@ class ConsensusUnlabelled(AbstractConsensusDist):
         # check that consensus and noconsensus lps are consistent
         assert t.allclose(consensus_lp.exp() + noconsensus_lp.exp(), t.ones(()))
          
-        dist = td.Bernoulli(logits=(consensus_lp - noconsensus_lp))
+        dist = td.Categorical(logits=t.stack([noconsensus_lp, consensus_lp], -1))
 
         #assert t.allclose(dist.log_prob(t.ones_like(logits)),  consensus_lp)
         #assert t.allclose(dist.log_prob(t.zeros_like(logits)), noconsensus_lp)
